@@ -7,7 +7,7 @@ import torch.nn.functional as F
 
 from dataloader.flow.datasets import FlyingChairs, FlyingThings3D, MpiSintel, KITTI
 from utils import frame_utils
-from utils.flow_viz import save_vis_flow_tofile, flow_to_image
+from utils.flow_viz import save_vis_flow_tofile, flow_to_image, draw_optical_flow, save_draw_optical_flow_tofile
 import imageio
 
 from utils.utils import InputPadder, compute_out_of_boundary_mask
@@ -683,6 +683,8 @@ def inference_flow(model,
     vis_flow_preds = []
     ori_imgs = []
 
+    flow_tensor = []
+
     for test_id in range(0, len(filenames) - 1):
         if (test_id + 1) % 50 == 0:
             print('predicting %d/%d' % (test_id + 1, len(filenames)))
@@ -696,6 +698,9 @@ def inference_flow(model,
 
         image1 = np.array(image1).astype(np.uint8)
         image2 = np.array(image2).astype(np.uint8)
+
+        image1_np = image1
+        image2_np = image2
 
         if len(image1.shape) == 2:  # gray image
             image1 = np.tile(image1[..., None], (1, 1, 3))
@@ -765,10 +770,11 @@ def inference_flow(model,
             output_file = os.path.join(output_path, os.path.basename(filenames[test_id])[:-4] + '_flow.png')
 
         if inference_video is not None and save_video:
-            vis_flow_preds.append(flow_to_image(flow))
+            vis_flow_preds.append(draw_optical_flow(image1_np,flow))
         else:
             # save vis flow
-            save_vis_flow_tofile(flow, output_file)
+            save_draw_optical_flow_tofile(image1_np,flow,output_file)
+
 
         # also predict backward flow
         if pred_bidir_flow:
@@ -799,17 +805,18 @@ def inference_flow(model,
                 Image.fromarray((bwd_occ[0].cpu().numpy() * 255.).astype(np.uint8)).save(bwd_occ_file)
 
         if save_flo_flow:
-            if inference_video is not None:
-                output_file = os.path.join(output_path, '%04d_pred.flo' % test_id)
-            else:
-                output_file = os.path.join(output_path, os.path.basename(filenames[test_id])[:-4] + '_pred.flo')
-            frame_utils.writeFlow(output_file, flow)
-            if pred_bidir_flow:
-                if inference_video is not None:
-                    output_file_bwd = os.path.join(output_path, '%04d_pred_bwd.flo' % test_id)
-                else:
-                    output_file_bwd = os.path.join(output_path, os.path.basename(filenames[test_id])[:-4] + '_pred_bwd.flo')
-                frame_utils.writeFlow(output_file_bwd, flow_bwd)
+            flow_tensor.append(flow)
+            # if inference_video is not None:
+            #     output_file = os.path.join(output_path, '%04d_pred.flo' % test_id)
+            # else:
+            #     output_file = os.path.join(output_path, os.path.basename(filenames[test_id])[:-4] + '_pred.flo')
+            # frame_utils.writeFlow(output_file, flow)
+            # if pred_bidir_flow:
+            #     if inference_video is not None:
+            #         output_file_bwd = os.path.join(output_path, '%04d_pred_bwd.flo' % test_id)
+            #     else:
+            #         output_file_bwd = os.path.join(output_path, os.path.basename(filenames[test_id])[:-4] + '_pred_bwd.flo')
+            #     frame_utils.writeFlow(output_file_bwd, flow_bwd)
 
     if save_video:
         suffix = '_flow_img.mp4' if concat_flow_img else '_flow.mp4'
@@ -827,5 +834,8 @@ def inference_flow(model,
             results = vis_flow_preds
 
         imageio.mimwrite(output_file, results, fps=fps, quality=8)
+
+    if save_flo_flow:
+        np.save(os.path.join(output_path, os.path.basename(output_path)+"_flow_tensor.npy"),flow_tensor)
 
     print('Done!')

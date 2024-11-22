@@ -18,6 +18,8 @@ from __future__ import print_function
 
 import numpy as np
 from PIL import Image
+import cv2
+
 
 
 def make_colorwheel():
@@ -288,3 +290,34 @@ def flow_tensor_to_image(flow):
     flow = np.transpose(flow, (2, 0, 1))  # [3, H, W]
 
     return flow
+
+
+def draw_optical_flow(image, flow, grid_size=(6, 6), scale=10):
+
+    # Extract u and v maps from OF NN output
+    u_flow = flow[:, :, 0]
+    v_flow = flow[:, :, 1]
+
+    h, w, _ = image.shape
+    grid_h, grid_w = grid_size
+    h_step, w_step = h/grid_h, w/grid_w
+    arrow_x = np.linspace(0, w, grid_w, endpoint=False, dtype=int)
+    arrow_y = np.linspace(0, h, grid_h, endpoint=False, dtype=int)
+
+    output_image = image.copy()
+
+    for y in arrow_y:
+        for x in arrow_x:
+            u = u_flow[y, x]
+            v = v_flow[y, x]
+            # magnitude = np.sqrt(u**2 + v**2)
+            # angle = np.arctan2(v, u)
+            color = (0, 255, 0)
+            cv2.arrowedLine(output_image, (x+int(w_step/2), y+int(h_step/2)), (x+int(w_step/2 + scale * u), y+int(h_step/2 + scale * v)), color, thickness = 1, tipLength = 0.3)
+
+    return output_image
+
+def save_draw_optical_flow_tofile(image,flow,output_path):
+    arrowed_image = draw_optical_flow(image,flow)
+
+    cv2.imwrite(output_path, arrowed_image)
